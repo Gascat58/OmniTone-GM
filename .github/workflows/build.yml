@@ -1,0 +1,30 @@
+name: Build OmniTone GM (Windows VST3)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item -Recurse "build/OmniToneGM_artefacts/Release/VST3/OmniTone GM.vst3" "package/OmniTone GM.vst3"
+          Copy-Item "INSTALL.txt" "package/INSTALL.txt"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniTone-GM-VST3
+          path: package

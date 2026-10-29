@@ -26,15 +26,22 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 2.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return "Default"; }
+    // The 128 GM sounds are offered to the host as presets, so a host can pick one directly.
+    int getNumPrograms() override { return 128; }
+    int getCurrentProgram() override { return currentProgram.load(); }
+    void setCurrentProgram (int index) override;
+    const juce::String getProgramName (int index) override;
     void changeProgramName (int, const juce::String&) override {}
 
     // The sound set lives in a shared settings file, not in each Mixcraft project.
-    void getStateInformation (juce::MemoryBlock&) override {}
-    void setStateInformation (const void*, int) override {}
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void* data, int size) override;
+    void updateTrackProperties (const TrackProperties& properties) override;
+
+    // Diagnostics: what the host has told this copy of the plugin.
+    std::atomic<int> setProgramCalls { 0 };
+    std::atomic<int> stateLoads { 0 }, lastStateSize { 0 };
+    juce::String getTrackName() const { const juce::SpinLock::ScopedLockType sl (trackNameLock); return trackName; }
 
     //==============================================================================
     // Used by the editor (message thread only).
@@ -59,6 +66,10 @@ private:
     juce::StringArray problems;
     int seenGeneration = -1;
     juce::Time seenFileTime;
+
+    std::atomic<int> currentProgram { 0 };
+    juce::SpinLock trackNameLock;
+    juce::String trackName;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OmniToneProcessor)
 };

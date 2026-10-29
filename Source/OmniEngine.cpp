@@ -212,6 +212,8 @@ void OmniEngine::handleMessage (const juce::MidiMessage& m)
         return;
     auto& cs = channels[(size_t) ch];
 
+    channelsSeen.fetch_or (1 << ch);
+
     if (m.isNoteOn())
     {
         if (cs.engine >= 0)
@@ -236,6 +238,8 @@ void OmniEngine::handleMessage (const juce::MidiMessage& m)
     else if (m.isProgramChange())
     {
         sawProgramChange = true;
+        ++programChangesSeen;
+        cs.explicitProgram = true;
         cs.program = m.getProgramChangeNumber() & 127;
         applyProgram (ch);
         lastChannel.store (ch);
@@ -245,11 +249,13 @@ void OmniEngine::handleMessage (const juce::MidiMessage& m)
     {
         const int cc = m.getControllerNumber();
         const int value = m.getControllerValue();
+        ++controllersSeen[(size_t) (cc & 127)];
 
         if (cc == GM::programCarrierCC)
         {
             // The patch number, smuggled past Mixcraft's import as a controller.
             sawCarrierCC = true;
+            cs.explicitProgram = true;
             cs.program = value & 127;
             applyProgram (ch);
             lastChannel.store (ch);
@@ -373,6 +379,20 @@ void OmniEngine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuff
     const juce::ScopedTryLock tl (lock);
     if (! tl.isLocked() || set == nullptr)
         return;
+
+    const int newHostProgram = pendingHostProgram.exchange (-1);
+    if (newHostProgram >= 0)
+    {
+        hostProgram = newHostProgram;
+        for (int ch = 0; ch < 16; ++ch)
+        {
+            auto& cs = channels[(size_t) ch];
+            if (ch != GM::drumChannel && ! cs.explicitProgram)
+                cs.program = hostProgram;
+        }
+        needsReapply = true;
+        lastProgram.store (hostProgram);
+    }
 
     if (needsReapply)
         reapplyAll();

@@ -108,6 +108,46 @@ void OmniToneProcessor::setReverbOn (bool on)
 }
 
 //==============================================================================
+void OmniToneProcessor::setCurrentProgram (int index)
+{
+    index = juce::jlimit (0, 127, index);
+    ++setProgramCalls;
+    currentProgram.store (index);
+    engine.setHostProgram (index);
+}
+
+const juce::String OmniToneProcessor::getProgramName (int index)
+{
+    if (! juce::isPositiveAndBelow (index, 128))
+        return {};
+    return juce::String (index).paddedLeft ('0', 3) + " " + GM::instrumentNames[index];
+}
+
+void OmniToneProcessor::getStateInformation (juce::MemoryBlock& dest)
+{
+    // Only remember which GM preset the track uses; the sound set itself is global.
+    juce::MemoryOutputStream out (dest, false);
+    out.writeString ("OmniToneGM");
+    out.writeInt (currentProgram.load());
+}
+
+void OmniToneProcessor::setStateInformation (const void* data, int size)
+{
+    ++stateLoads;
+    lastStateSize.store (size);
+
+    juce::MemoryInputStream in (data, (size_t) juce::jmax (0, size), false);
+    if (size >= 14 && in.readString() == "OmniToneGM")
+        setCurrentProgram (in.readInt());
+}
+
+void OmniToneProcessor::updateTrackProperties (const TrackProperties& properties)
+{
+    const juce::SpinLock::ScopedLockType sl (trackNameLock);
+    trackName = properties.name;
+}
+
+//==============================================================================
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new OmniToneProcessor();

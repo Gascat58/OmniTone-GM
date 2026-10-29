@@ -42,6 +42,10 @@ public:
     void process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi); // audio thread
     void requestPreview (int slot) { previewRequest.store (slot); }
 
+    // A program chosen by the host as a plugin preset (not a MIDI event). It becomes the
+    // sound for every channel that hasn't received its own CC 3 / program change.
+    void setHostProgram (int program) { pendingHostProgram.store (program & 127); }
+
     double getSampleRate() const { return sampleRate; }
 
     // Read by the editor to show what this track is doing.
@@ -51,6 +55,11 @@ public:
     std::atomic<bool> sawProgramChange { false };
     std::atomic<int>  notesPlayed { 0 };
 
+    // Diagnostics: what MIDI actually arrives from the host.
+    std::atomic<int> channelsSeen { 0 };                 // bit per MIDI channel
+    std::atomic<int> programChangesSeen { 0 };
+    std::array<std::atomic<int>, 128> controllersSeen {};
+
 private:
     struct ChannelState
     {
@@ -59,6 +68,7 @@ private:
         int reverbSend = 40;
         bool sustain = false;
         bool used = false;
+        bool explicitProgram = false; // set by CC 3 or a program change
         int engine = -1;
     };
 
@@ -85,6 +95,8 @@ private:
     int currentReverbSend = -1;
 
     std::atomic<int> previewRequest { -1 };
+    std::atomic<int> pendingHostProgram { -1 };
+    int hostProgram = -1;
     int previewEngine = -1, previewNote = -1;
     int previewSamplesLeft = 0;
 };

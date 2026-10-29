@@ -32,7 +32,7 @@ private:
 
     OmniToneProcessor& processor;
 
-    juce::Label titleLabel, mainLabel, mainPath, statusLabel, problemsLabel, helpLabel;
+    juce::Label titleLabel, mainLabel, mainPath, statusLabel, problemsLabel, helpLabel, diagLabel;
     juce::TextButton browseButton { "Browse..." };
     juce::ToggleButton reverbToggle { "Built-in reverb (follows CC91)" };
     juce::ListBox list;

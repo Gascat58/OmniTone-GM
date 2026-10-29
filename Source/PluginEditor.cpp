@@ -58,6 +58,12 @@ OmniToneEditor::OmniToneEditor (OmniToneProcessor& p)
     problemsLabel.setMinimumHorizontalScale (0.7f);
     addAndMakeVisible (problemsLabel);
 
+    diagLabel.setColour (juce::Label::textColourId, Colours::replaced);
+    diagLabel.setColour (juce::Label::backgroundColourId, Colours::panel);
+    diagLabel.setFont (juce::FontOptions (12.5f));
+    diagLabel.setJustificationType (juce::Justification::topLeft);
+    addAndMakeVisible (diagLabel);
+
     helpLabel.setText ("Changes are saved once and used by every OmniTone track. Double-click a row to hear it.",
                        juce::dontSendNotification);
     helpLabel.setColour (juce::Label::textColourId, Colours::dim);
@@ -66,7 +72,7 @@ OmniToneEditor::OmniToneEditor (OmniToneProcessor& p)
 
     processor.onSoundSetChanged = [this] { refresh(); };
 
-    setSize (680, 620);
+    setSize (680, 680);
     setResizable (true, true);
     setResizeLimits (560, 420, 1400, 1400);
 
@@ -103,6 +109,8 @@ void OmniToneEditor::resized()
     r.removeFromTop (6);
 
     helpLabel.setBounds (r.removeFromBottom (20));
+    diagLabel.setBounds (r.removeFromBottom (54));
+    r.removeFromBottom (4);
     statusLabel.setBounds (r.removeFromBottom (22));
     problemsLabel.setBounds (r.removeFromBottom (22));
     r.removeFromBottom (6);
@@ -193,12 +201,37 @@ void OmniToneEditor::timerCallback()
         text = "This track: MIDI channel " + juce::String (ch + 1) + " playing ";
         text += (ch == GM::drumChannel) ? juce::String ("Drums") : slotTitle (prog).trim();
 
-        if (ch != GM::drumChannel && ! e.sawCarrierCC.load() && ! e.sawProgramChange.load())
-            text += "   (no CC 3 patch number received - defaulting to piano)";
-        else if (e.sawCarrierCC.load())
+        if (e.sawCarrierCC.load())
             text += "   (patch set by CC 3)";
+        else if (processor.setProgramCalls.load() > 0 && ch != GM::drumChannel)
+            text += "   (preset chosen by Mixcraft)";
+        else if (ch != GM::drumChannel && ! e.sawProgramChange.load())
+            text += "   (no patch number received - defaulting to piano)";
     }
     statusLabel.setText (text, juce::dontSendNotification);
+
+    // Diagnostics: exactly what Mixcraft has sent this copy of OmniTone.
+    juce::String chans;
+    const int mask = e.channelsSeen.load();
+    for (int i = 0; i < 16; ++i)
+        if (mask & (1 << i))
+            chans << (chans.isEmpty() ? "" : ",") << (i + 1);
+
+    juce::String ccs;
+    for (int i = 0; i < 128; ++i)
+        if (const int n = e.controllersSeen[(size_t) i].load())
+            ccs << (ccs.isEmpty() ? "" : "  ") << "CC" << i << " x" << n;
+
+    const auto trackName = processor.getTrackName();
+    juce::String diag;
+    diag << "Mixcraft -> preset picks: " << processor.setProgramCalls.load()
+         << " (current " << juce::String (processor.getCurrentProgram()).paddedLeft ('0', 3) << ")"
+         << "   settings loads: " << processor.stateLoads.load() << " (last " << processor.lastStateSize.load() << " bytes)"
+         << "   track name: " << (trackName.isEmpty() ? juce::String ("(not given)") : "\"" + trackName + "\"") << "\n"
+         << "MIDI received -> channels: " << (chans.isEmpty() ? juce::String ("none yet") : chans)
+         << "   program changes: " << e.programChangesSeen.load() << "\n"
+         << "Controllers: " << (ccs.isEmpty() ? juce::String ("none yet") : ccs);
+    diagLabel.setText (diag, juce::dontSendNotification);
 }
 
 void OmniToneEditor::previewRow (int row)

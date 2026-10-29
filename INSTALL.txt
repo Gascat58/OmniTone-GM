@@ -1,0 +1,39 @@
+OmniTone GM - installing
+========================
+
+1. Close Mixcraft.
+
+2. Copy the whole "OmniTone GM.vst3" folder into:
+       C:\Program Files\Common Files\VST3
+   (Windows will ask for permission - click Continue.)
+
+3. Get a General MIDI SoundFont (.sf2) if you don't have one.
+   A good free one is GeneralUser GS. Put it somewhere permanent,
+   for example  C:\SoundFonts\
+
+4. Start Mixcraft. Go to Preferences > Plug-Ins and click
+   "Re-Scan All VST Plug-Ins".
+
+5. In Preferences > Plug-Ins, set
+       Default General MIDI (GM) Instrument  =  OmniTone GM
+
+6. Add OmniTone GM to any track once, open its window, click
+   "Browse..." and pick your main SoundFont. This is saved for
+   every OmniTone track from now on.
+
+Choosing sounds
+---------------
+- Each imported track picks its sound from Controller 3 (CC 3),
+  which should hold the same number as the track's Patch event.
+  Mixcraft removes Patch events on import, but keeps CC 3.
+- No CC 3 on a track = it plays piano (drums on channel 10 always work).
+- The bottom of the OmniTone window shows what the track is playing.
+
+Replacing an instrument
+-----------------------
+Select a row, click "Replace...", pick any .sf2 file, then pick the
+sound inside it. "Reset to main" puts it back. Double-click a row
+(or click Preview) to hear it.
+
+Your settings are stored in:
+    %APPDATA%\OmniTone GM\soundset.json

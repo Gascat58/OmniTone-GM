@@ -101,6 +101,18 @@ void OmniToneProcessor::clearOverride (int slot)
     saveAndRebuild();
 }
 
+void OmniToneProcessor::replaceSoundSet (const SoundSet& newSet)
+{
+    // Keep a copy of the set being replaced, just in case.
+    const auto settings = SoundSet::getSettingsFile();
+    if (settings.existsAsFile())
+        settings.copyFileTo (settings.getSiblingFile ("soundset-before-import-"
+                                                      + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S")
+                                                      + ".json"));
+    soundSet = newSet;
+    saveAndRebuild();
+}
+
 void OmniToneProcessor::setReverbOn (bool on)
 {
     soundSet.reverbOn = on;
@@ -112,8 +124,29 @@ void OmniToneProcessor::setCurrentProgram (int index)
 {
     index = juce::jlimit (0, 127, index);
     ++setProgramCalls;
+
+    // The host remembers the last preset it chose and may send it again at any time
+    // (when the window updates, on playback reset...). After a sound has been clicked in
+    // the OmniTone window, only a NEW choice from the host's dropdown is obeyed.
+    const int previousHostChoice = lastHostChoice.exchange (index);
+    if (handPicked.load() && index == previousHostChoice && index != currentProgram.load())
+    {
+        ++ignoredHostPicks;
+        return;
+    }
+
+    handPicked = false;
     currentProgram.store (index);
     engine.setHostProgram (index);
+}
+
+void OmniToneProcessor::chooseProgramByHand (int index)
+{
+    index = juce::jlimit (0, 127, index);
+    handPicked = true;
+    currentProgram.store (index);
+    engine.setHostProgram (index, true);
+    updateHostDisplay (ChangeDetails().withProgramChanged (true)); // let the dropdown show it too
 }
 
 const juce::String OmniToneProcessor::getProgramName (int index)
@@ -138,7 +171,14 @@ void OmniToneProcessor::setStateInformation (const void* data, int size)
 
     juce::MemoryInputStream in (data, (size_t) juce::jmax (0, size), false);
     if (size >= 14 && in.readString() == "OmniToneGM")
-        setCurrentProgram (in.readInt());
+    {
+        // A saved project: restore the track's sound exactly as it was.
+        const int saved = juce::jlimit (0, 127, in.readInt());
+        handPicked = false;
+        lastHostChoice.store (saved);
+        currentProgram.store (saved);
+        engine.setHostProgram (saved, true);
+    }
 }
 
 void OmniToneProcessor::updateTrackProperties (const TrackProperties& properties)

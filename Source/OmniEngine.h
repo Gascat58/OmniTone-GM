@@ -44,7 +44,11 @@ public:
 
     // A program chosen by the host as a plugin preset (not a MIDI event). It becomes the
     // sound for every channel that hasn't received its own CC 3 / program change.
-    void setHostProgram (int program) { pendingHostProgram.store (program & 127); }
+    void setHostProgram (int program, bool overrideFileSounds = false)
+    {
+        pendingOverride.store (overrideFileSounds);
+        pendingHostProgram.store (program & 127);
+    }
 
     double getSampleRate() const { return sampleRate; }
 
@@ -96,6 +100,7 @@ private:
 
     std::atomic<int> previewRequest { -1 };
     std::atomic<int> pendingHostProgram { -1 };
+    std::atomic<bool> pendingOverride { false };
     int hostProgram = -1;
     int previewEngine = -1, previewNote = -1;
     int previewSamplesLeft = 0;

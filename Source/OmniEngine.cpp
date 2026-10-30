@@ -384,10 +384,15 @@ void OmniEngine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuff
     if (newHostProgram >= 0)
     {
         hostProgram = newHostProgram;
+        const bool overrideAll = pendingOverride.exchange (false);
         for (int ch = 0; ch < 16; ++ch)
         {
             auto& cs = channels[(size_t) ch];
-            if (ch != GM::drumChannel && ! cs.explicitProgram)
+            if (ch == GM::drumChannel)
+                continue;
+            if (overrideAll)
+                cs.explicitProgram = false; // a sound picked by hand beats the one from the file
+            if (! cs.explicitProgram)
                 cs.program = hostProgram;
         }
         needsReapply = true;

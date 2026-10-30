@@ -17,7 +17,8 @@ std::map<juce::String, tsf*>& SoundFontCache::masters()
 tsf* SoundFontCache::getMaster (const juce::String& path, juce::String* errorOut)
 {
     const juce::File file (path);
-    const auto key = file.getFullPathName().toLowerCase();
+    // Include the file's date, so an edited SoundFont is reloaded instead of using the old copy.
+    const auto key = file.getFullPathName().toLowerCase() + "|" + juce::String (file.getLastModificationTime().toMilliseconds());
 
     auto it = masters().find (key);
     if (it != masters().end())

@@ -40,7 +40,7 @@ public:
     void updateTrackProperties (const TrackProperties& properties) override;
 
     // Diagnostics: what the host has told this copy of the plugin.
-    std::atomic<int> setProgramCalls { 0 };
+    std::atomic<int> setProgramCalls { 0 }, ignoredHostPicks { 0 };
     std::atomic<int> stateLoads { 0 }, lastStateSize { 0 };
     juce::String getTrackName() const { const juce::SpinLock::ScopedLockType sl (trackNameLock); return trackName; }
 
@@ -52,6 +52,7 @@ public:
     void setOverride (int slot, const SlotOverride& o);
     void clearOverride (int slot);
     void setReverbOn (bool on);
+    void replaceSoundSet (const SoundSet& newSet); // used by Import
     OmniEngine& getEngine() { return engine; }
 
     std::function<void()> onSoundSetChanged; // the editor listens to refresh its list
@@ -69,6 +70,8 @@ private:
     juce::Time seenFileTime;
 
     std::atomic<int> currentProgram { 0 };
+    std::atomic<int> lastHostChoice { 0 };   // the preset the host last sent us
+    std::atomic<bool> handPicked { false };  // true after a click in the OmniTone window
     juce::SpinLock trackNameLock;
     juce::String trackName;
 

@@ -29,11 +29,25 @@ Choosing sounds
 - No CC 3 on a track = it plays piano (drums on channel 10 always work).
 - The bottom of the OmniTone window shows what the track is playing.
 
+Choosing this track's sound
+---------------------------
+Click any instrument in the list and it becomes this track's sound
+(Mixcraft's preset dropdown at the top works too).
+
 Replacing an instrument
 -----------------------
 Select a row, click "Replace...", pick any .sf2 file, then pick the
 sound inside it. "Reset to main" puts it back. Double-click a row
 (or click Preview) to hear it.
+
+Backing up and sharing a sound set
+----------------------------------
+"Export Set..." packs your settings AND every SoundFont they use into
+one .otgm file - a complete backup, or something to give a friend.
+"Import Set..." loads one. Your current set is backed up first (as
+soundset-before-import-<date>.json next to the settings file).
+Imported SoundFonts go in  %APPDATA%\OmniTone GM\Sound Sets\
+Only share SoundFonts whose licence allows it.
 
 Your settings are stored in:
     %APPDATA%\OmniTone GM\soundset.json

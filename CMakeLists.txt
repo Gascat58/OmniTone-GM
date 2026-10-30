@@ -25,6 +25,7 @@ set(OMNITONE_ENGINE_SOURCES
     Source/TsfImpl.cpp
     Source/SoundSet.cpp
     Source/SoundFontCache.cpp
+    Source/SoundSetPackage.cpp
     Source/OmniEngine.cpp)
 
 if(OMNITONE_BUILD_PLUGIN)

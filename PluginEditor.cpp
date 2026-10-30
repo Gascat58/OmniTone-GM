@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "SoundSetPackage.h"
 #include <map>
 
 namespace Colours
@@ -37,6 +38,13 @@ OmniToneEditor::OmniToneEditor (OmniToneProcessor& p)
     reverbToggle.setColour (juce::ToggleButton::textColourId, Colours::text);
     addAndMakeVisible (reverbToggle);
 
+    exportButton.onClick = [this] { exportSet(); };
+    importButton.onClick = [this] { importSet(); };
+    exportButton.setTooltip ("Pack this sound set and all its SoundFonts into one file, to back it up or share it");
+    importButton.setTooltip ("Load a sound set file (.otgm) - your current set is backed up first");
+    addAndMakeVisible (exportButton);
+    addAndMakeVisible (importButton);
+
     list.setModel (this);
     list.setRowHeight (24);
     list.setColour (juce::ListBox::backgroundColourId, Colours::panel);
@@ -62,7 +70,15 @@ OmniToneEditor::OmniToneEditor (OmniToneProcessor& p)
     diagLabel.setColour (juce::Label::backgroundColourId, Colours::panel);
     diagLabel.setFont (juce::FontOptions (12.5f));
     diagLabel.setJustificationType (juce::Justification::topLeft);
-    addAndMakeVisible (diagLabel);
+    addChildComponent (diagLabel); // hidden until "Show details" is ticked
+
+    detailsToggle.setColour (juce::ToggleButton::textColourId, Colours::dim);
+    detailsToggle.onClick = [this]
+    {
+        diagLabel.setVisible (detailsToggle.getToggleState());
+        resized();
+    };
+    addAndMakeVisible (detailsToggle);
 
     helpLabel.setText ("Click a sound to play it on this track. Double-click to preview. Sound set changes apply to every OmniTone track.",
                        juce::dontSendNotification);
@@ -72,7 +88,7 @@ OmniToneEditor::OmniToneEditor (OmniToneProcessor& p)
 
     processor.onSoundSetChanged = [this] { refresh(); };
 
-    setSize (680, 680);
+    setSize (700, 640);
     setResizable (true, true);
     setResizeLimits (560, 420, 1400, 1400);
 
@@ -106,12 +122,21 @@ void OmniToneEditor::resized()
     mainPath.setBounds (mainRow);
 
     r.removeFromTop (6);
-    reverbToggle.setBounds (r.removeFromTop (26).removeFromLeft (320));
+    auto optionsRow = r.removeFromTop (28);
+    exportButton.setBounds (optionsRow.removeFromRight (110));
+    optionsRow.removeFromRight (8);
+    importButton.setBounds (optionsRow.removeFromRight (110));
+    reverbToggle.setBounds (optionsRow.removeFromLeft (320));
     r.removeFromTop (6);
 
-    helpLabel.setBounds (r.removeFromBottom (20));
-    diagLabel.setBounds (r.removeFromBottom (54));
-    r.removeFromBottom (4);
+    auto helpRow = r.removeFromBottom (20);
+    detailsToggle.setBounds (helpRow.removeFromRight (120));
+    helpLabel.setBounds (helpRow);
+    if (diagLabel.isVisible())
+    {
+        diagLabel.setBounds (r.removeFromBottom (54));
+        r.removeFromBottom (4);
+    }
     statusLabel.setBounds (r.removeFromBottom (22));
     problemsLabel.setBounds (r.removeFromBottom (22));
     r.removeFromBottom (6);
@@ -180,6 +205,8 @@ void OmniToneEditor::refresh()
 
 void OmniToneEditor::updateButtons()
 {
+    exportButton.setEnabled (! busy);
+    importButton.setEnabled (! busy);
     const int row = list.getSelectedRow();
     replaceButton.setEnabled (row >= 0);
     previewButton.setEnabled (row >= 0);
@@ -252,6 +279,7 @@ void OmniToneEditor::timerCallback()
     const auto trackName = processor.getTrackName();
     juce::String diag;
     diag << "Mixcraft -> preset picks: " << processor.setProgramCalls.load()
+         << " (ignored " << processor.ignoredHostPicks.load() << ")"
          << " (current " << juce::String (processor.getCurrentProgram()).paddedLeft ('0', 3) << ")"
          << "   settings loads: " << processor.stateLoads.load() << " (last " << processor.lastStateSize.load() << " bytes)"
          << "   track name: " << (trackName.isEmpty() ? juce::String ("(not given)") : "\"" + trackName + "\"") << "\n"
@@ -353,4 +381,126 @@ void OmniToneEditor::choosePreset (int slot, const juce::String& path)
                             safeThis->processor.setOverride (slot, o);
                             safeThis->processor.getEngine().requestPreview (slot);
                         });
+}
+
+//==============================================================================
+// Export / Import
+
+void OmniToneEditor::setBusy (const juce::String& message)
+{
+    busy = message.isNotEmpty();
+    if (busy)
+        problemsLabel.setText (message, juce::dontSendNotification);
+    else
+        refresh();
+    updateButtons();
+}
+
+void OmniToneEditor::exportSet()
+{
+    const auto set = processor.getSoundSet();
+    if (SoundSetPackage::getFilesUsed (set).isEmpty())
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "OmniTone GM",
+                                                "Choose a main SoundFont first - there's nothing to export yet.");
+        return;
+    }
+
+    const auto start = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                           .getChildFile ("My OmniTone Sound Set" + juce::String (SoundSetPackage::fileExtension));
+
+    chooser = std::make_unique<juce::FileChooser> ("Export sound set", start, "*.otgm");
+    juce::Component::SafePointer<OmniToneEditor> safeThis (this);
+    chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::warnAboutOverwriting,
+                          [safeThis, set] (const juce::FileChooser& fc)
+    {
+        auto file = fc.getResult();
+        if (safeThis == nullptr || file == juce::File())
+            return;
+        if (! file.hasFileExtension ("otgm"))
+            file = file.withFileExtension ("otgm");
+
+        safeThis->setBusy ("Exporting sound set... (big SoundFonts can take a little while)");
+
+        // Pack on a background thread so Mixcraft doesn't freeze.
+        juce::Thread::launch ([safeThis, set, file]
+        {
+            juce::String error;
+            const bool ok = SoundSetPackage::exportTo (set, file, error);
+
+            juce::MessageManager::callAsync ([safeThis, ok, error, file]
+            {
+                if (safeThis != nullptr)
+                    safeThis->setBusy ({});
+
+                if (ok)
+                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Sound set exported",
+                        "Saved " + file.getFileName() + " ("
+                        + juce::File::descriptionOfSizeInBytes (file.getSize()) + ")\n\n"
+                        "Keep it as a backup, or give it to a friend - they just click Import Set... in OmniTone.");
+                else
+                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Export failed", error);
+            });
+        });
+    });
+}
+
+void OmniToneEditor::importSet()
+{
+    chooser = std::make_unique<juce::FileChooser> ("Import sound set",
+                                                   juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
+                                                   "*.otgm");
+    juce::Component::SafePointer<OmniToneEditor> safeThis (this);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [safeThis] (const juce::FileChooser& fc)
+    {
+        const auto file = fc.getResult();
+        if (safeThis == nullptr || ! file.existsAsFile())
+            return;
+
+        auto options = juce::MessageBoxOptions::makeOptionsOkCancel (
+            juce::MessageBoxIconType::QuestionIcon, "Import sound set",
+            "Load \"" + file.getFileNameWithoutExtension() + "\" as your sound set?\n\n"
+            "It replaces the current set on every OmniTone track. Your current set is backed up first.",
+            "Import", "Cancel", safeThis.getComponent());
+
+        juce::AlertWindow::showAsync (options, [safeThis, file] (int result)
+        {
+            if (safeThis != nullptr && result == 1)
+                safeThis->runImport (file);
+        });
+    });
+}
+
+void OmniToneEditor::runImport (const juce::File& package)
+{
+    setBusy ("Importing sound set...");
+    juce::Component::SafePointer<OmniToneEditor> safeThis (this);
+
+    juce::Thread::launch ([safeThis, package]
+    {
+        SoundSet set;
+        juce::File folder;
+        juce::String message;
+        const bool ok = SoundSetPackage::importFrom (package, set, folder, message);
+
+        juce::MessageManager::callAsync ([safeThis, ok, set, folder, message]
+        {
+            if (safeThis == nullptr)
+                return;
+
+            safeThis->setBusy ({});
+            if (! ok)
+            {
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import failed", message);
+                return;
+            }
+
+            safeThis->processor.replaceSoundSet (set);
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Sound set imported",
+                "The sound set is ready on every OmniTone track.\n\nIts SoundFonts were placed in:\n"
+                + folder.getFullPathName() + (message.isNotEmpty() ? "\n\n" + message : juce::String()));
+        });
+    });
 }

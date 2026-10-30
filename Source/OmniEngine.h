@@ -44,11 +44,15 @@ public:
 
     // A program chosen by the host as a plugin preset (not a MIDI event). It becomes the
     // sound for every channel that hasn't received its own CC 3 / program change.
+    // 0..127 = a GM instrument, 128 (GM::drumSlot) = "Drums": the whole track plays as a
+    // drum kit, whatever MIDI channel the notes arrive on.
     void setHostProgram (int program, bool overrideFileSounds = false)
     {
         pendingOverride.store (overrideFileSounds);
-        pendingHostProgram.store (program & 127);
+        pendingHostProgram.store (juce::jlimit (0, (int) GM::drumSlot, program));
     }
+
+    std::atomic<bool> drumTrack { false }; // read by the editor
 
     double getSampleRate() const { return sampleRate; }
 

@@ -27,7 +27,7 @@ public:
     double getTailLengthSeconds() const override { return 2.0; }
 
     // The 128 GM sounds are offered to the host as presets, so a host can pick one directly.
-    int getNumPrograms() override { return 128; }
+    int getNumPrograms() override { return GM::numSlots; } // 128 instruments + Drums
     int getCurrentProgram() override { return currentProgram.load(); }
     void setCurrentProgram (int index) override;
     void chooseProgramByHand (int index); // from the OmniTone window
@@ -72,6 +72,9 @@ private:
     std::atomic<int> currentProgram { 0 };
     std::atomic<int> lastHostChoice { 0 };   // the preset the host last sent us
     std::atomic<bool> handPicked { false };  // true after a click in the OmniTone window
+public:
+    std::atomic<bool> soundChosen { false }; // a sound has been picked by hand or by the host
+private:
     juce::SpinLock trackNameLock;
     juce::String trackName;
 

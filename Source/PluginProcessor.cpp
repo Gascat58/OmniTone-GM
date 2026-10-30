@@ -122,7 +122,7 @@ void OmniToneProcessor::setReverbOn (bool on)
 //==============================================================================
 void OmniToneProcessor::setCurrentProgram (int index)
 {
-    index = juce::jlimit (0, 127, index);
+    index = juce::jlimit (0, (int) GM::drumSlot, index);
     ++setProgramCalls;
 
     // The host remembers the last preset it chose and may send it again at any time
@@ -136,14 +136,16 @@ void OmniToneProcessor::setCurrentProgram (int index)
     }
 
     handPicked = false;
+    soundChosen = true;
     currentProgram.store (index);
     engine.setHostProgram (index);
 }
 
 void OmniToneProcessor::chooseProgramByHand (int index)
 {
-    index = juce::jlimit (0, 127, index);
+    index = juce::jlimit (0, (int) GM::drumSlot, index);
     handPicked = true;
+    soundChosen = true;
     currentProgram.store (index);
     engine.setHostProgram (index, true);
     updateHostDisplay (ChangeDetails().withProgramChanged (true)); // let the dropdown show it too
@@ -151,6 +153,8 @@ void OmniToneProcessor::chooseProgramByHand (int index)
 
 const juce::String OmniToneProcessor::getProgramName (int index)
 {
+    if (index == GM::drumSlot)
+        return "Drums";
     if (! juce::isPositiveAndBelow (index, 128))
         return {};
     return juce::String (index).paddedLeft ('0', 3) + " " + GM::instrumentNames[index];
@@ -173,8 +177,9 @@ void OmniToneProcessor::setStateInformation (const void* data, int size)
     if (size >= 14 && in.readString() == "OmniToneGM")
     {
         // A saved project: restore the track's sound exactly as it was.
-        const int saved = juce::jlimit (0, 127, in.readInt());
+        const int saved = juce::jlimit (0, (int) GM::drumSlot, in.readInt());
         handPicked = false;
+        soundChosen = true;
         lastHostChoice.store (saved);
         currentProgram.store (saved);
         engine.setHostProgram (saved, true);

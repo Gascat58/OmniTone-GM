@@ -207,9 +207,11 @@ void OmniEngine::applyProgram (int ch)
 
 void OmniEngine::handleMessage (const juce::MidiMessage& m)
 {
-    const int ch = m.getChannel() - 1;
+    int ch = m.getChannel() - 1;
     if (ch < 0 || ch >= 16)
         return;
+    if (drumTrack.load())
+        ch = GM::drumChannel; // drum track: everything goes to the drum kit
     auto& cs = channels[(size_t) ch];
 
     channelsSeen.fetch_or (1 << ch);
@@ -381,8 +383,25 @@ void OmniEngine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuff
         return;
 
     const int newHostProgram = pendingHostProgram.exchange (-1);
-    if (newHostProgram >= 0)
+    if (newHostProgram == GM::drumSlot)
     {
+        // Drum track: every note is played on channel 10's drum kit.
+        if (! drumTrack.load())
+            for (int ch = 0; ch < 16; ++ch)
+                for (auto* e : set->engines)
+                    if (e != nullptr)
+                        tsf_channel_note_off_all (e, ch);
+        pendingOverride.store (false);
+        drumTrack = true;
+        lastProgram.store (GM::drumSlot);
+    }
+    else if (newHostProgram >= 0)
+    {
+        if (drumTrack.load())
+            for (auto* e : set->engines)
+                if (e != nullptr)
+                    tsf_channel_note_off_all (e, GM::drumChannel);
+        drumTrack = false;
         hostProgram = newHostProgram;
         const bool overrideAll = pendingOverride.exchange (false);
         for (int ch = 0; ch < 16; ++ch)

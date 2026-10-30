@@ -80,7 +80,7 @@ OmniToneEditor::OmniToneEditor (OmniToneProcessor& p)
     };
     addAndMakeVisible (detailsToggle);
 
-    helpLabel.setText ("Click a sound to play it on this track. Double-click to preview. Sound set changes apply to every OmniTone track.",
+    helpLabel.setText ("Click a sound (or Drums) to play it on this track. Double-click to preview. Replacements apply to every OmniTone track.",
                        juce::dontSendNotification);
     helpLabel.setColour (juce::Label::textColourId, Colours::dim);
     helpLabel.setFont (juce::FontOptions (12.5f));
@@ -217,8 +217,8 @@ void OmniToneEditor::selectedRowsChanged (int row)
 {
     updateButtons();
 
-    // Clicking an instrument makes it this track's sound (the drums row is always channel 10).
-    if (! syncingSelection && juce::isPositiveAndBelow (row, 128) && row != processor.getCurrentProgram())
+    // Clicking an instrument makes it this track's sound; clicking Drums makes it a drum track.
+    if (! syncingSelection && juce::isPositiveAndBelow (row, GM::numSlots) && row != processor.getCurrentProgram())
     {
         processor.chooseProgramByHand (row);
         shownProgram = row;
@@ -252,15 +252,24 @@ void OmniToneEditor::timerCallback()
     }
     else
     {
-        text = "This track: MIDI channel " + juce::String (ch + 1) + " playing ";
-        text += (ch == GM::drumChannel) ? juce::String ("Drums") : slotTitle (prog).trim();
+        if (e.drumTrack.load())
+        {
+            text = "This track: drum track - every note plays the drum kit";
+        }
+        else
+        {
+            text = "This track: MIDI channel " + juce::String (ch + 1) + " playing ";
+            text += (ch == GM::drumChannel) ? juce::String ("Drums") : slotTitle (prog).trim();
 
-        if (e.sawCarrierCC.load())
-            text += "   (patch set by CC 3)";
-        else if (processor.setProgramCalls.load() > 0 && ch != GM::drumChannel)
-            text += "   (preset chosen by Mixcraft)";
-        else if (ch != GM::drumChannel && ! e.sawProgramChange.load())
-            text += "   (no patch number received - defaulting to piano)";
+            if (ch == GM::drumChannel)
+                text += "   (channel 10 is always drums)";
+            else if (e.sawCarrierCC.load())
+                text += "   (patch set by CC 3)";
+            else if (processor.soundChosen.load())
+                text += "   (sound chosen for this track)";
+            else if (! e.sawProgramChange.load())
+                text += "   (no sound chosen yet - click one in the list)";
+        }
     }
     statusLabel.setText (text, juce::dontSendNotification);
 
